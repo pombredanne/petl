@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 # Copy of the "OrderedDict" and "Counter" classes from Python 2.7
 
@@ -510,6 +511,8 @@ class Counter(dict):
             if newcount > 0:
                 result[elem] = newcount
         return result
+
+
 ####################################################################
 #  itertools functions  new in Python 2.7 - Quick Fix:
 ####################################################################

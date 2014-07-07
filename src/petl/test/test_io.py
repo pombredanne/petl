@@ -839,14 +839,16 @@ def test_tohtml():
     # exercise function
     table = (('foo', 'bar'),
              ('a', 1),
-             ('b', (1, 2)))
+             ('b', (1, 2)),
+             ('c', False))
+
     f = NamedTemporaryFile(delete=False)
     tohtml(table, f.name, lineterminator='\n')
     
     # check what it did
     with open(f.name, 'rb') as o:
         actual = o.read()
-        expect = """<table>
+        expect = """<table class='petl'>
 <thead>
 <tr>
 <th>foo</th>
@@ -861,6 +863,10 @@ def test_tohtml():
 <tr>
 <td>b</td>
 <td>(1, 2)</td>
+</tr>
+<tr>
+<td>c</td>
+<td>False</td>
 </tr>
 </tbody>
 </table>
@@ -880,7 +886,7 @@ def test_tohtml_caption():
     # check what it did
     with open(f.name, 'rb') as o:
         actual = o.read()
-        expect = """<table>
+        expect = """<table class='petl'>
 <caption>my table</caption>
 <thead>
 <tr>

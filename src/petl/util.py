@@ -201,11 +201,8 @@ def iterdicts(table, *sliceargs, **kwargs):
     .. versionadded:: 0.15
 
     """
-    
-    if 'missing' in kwargs:
-        missing = kwargs['missing']
-    else:
-        missing = None
+
+    missing = kwargs.get('missing', None)
     it = iter(table)
     flds = it.next()
     if sliceargs:
@@ -321,15 +318,9 @@ def iternamedtuples(table, *sliceargs, **kwargs):
     .. versionadded:: 0.15
     
     """
-    
-    if 'missing' in kwargs:
-        missing = kwargs['missing']
-    else:
-        missing = None
-    if 'name' in kwargs:
-        name = kwargs['name']
-    else:
-        name = 'row'
+
+    missing = kwargs.get('missing', None)
+    name = kwargs.get('name', 'row')
     it = iter(table)
     flds = it.next()
     nt = namedtuple(name, tuple(flds))
@@ -465,15 +456,9 @@ class Look(object):
             self.sliceargs = (5,)
         else:
             self.sliceargs = sliceargs
-        if 'vrepr' in kwargs:
-            self.vrepr = kwargs['vrepr']
-        else:
-            self.vrepr = repr
-        if 'style' in kwargs:
-            self.style = kwargs['style']
-        else:
-            self.style = look.default_style
-        
+        self.vrepr = kwargs.get('vrepr', repr)
+        self.style = kwargs.get('style', look.default_style)
+
     @property
     def n(self):
         if not self.sliceargs:
@@ -597,7 +582,7 @@ def format_table_grid(table, vrepr, sliceargs):
         rowline = u'|'
         for i, w in enumerate(colwidths):
             vr = valsrepr[i]
-            if i < len(vals) and isinstance(vals[i], (int, long, float)):
+            if i < len(vals) and isinstance(vals[i], (int, long, float)) and not isinstance(vals[i], bool):
                 # left pad numbers
                 rowline += u' ' * (w + 1 - len(vr)) # padding
                 rowline += vr + u' |'
@@ -663,7 +648,7 @@ def format_table_simple(table, vrepr, sliceargs):
         rowline = u''
         for i, w in enumerate(colwidths):
             vr = valsrepr[i]
-            if i < len(vals) and isinstance(vals[i], (int, long, float)):
+            if i < len(vals) and isinstance(vals[i], (int, long, float)) and not isinstance(vals[i], bool):
                 # left pad numbers
                 rowline += vr.rjust(w)
             else:      
@@ -725,7 +710,7 @@ def format_table_minimal(table, vrepr, sliceargs):
         rowline = u''
         for i, w in enumerate(colwidths):
             vr = valsrepr[i]
-            if i < len(vals) and isinstance(vals[i], (int, long, float)):
+            if i < len(vals) and isinstance(vals[i], (int, long, float)) and not isinstance(vals[i], bool):
                 # left pad numbers
                 rowline += vr.rjust(w)
             else:      
@@ -816,7 +801,7 @@ class See(object):
         return output
         
     
-def itervalues(table, field, *sliceargs, **kwargs):
+def itervalues(table, *field, **kwargs):
     """
     Return an iterator over values in a given field or fields. E.g.::
     
@@ -847,7 +832,7 @@ def itervalues(table, field, *sliceargs, **kwargs):
         ...          [1, 'a', True],
         ...          [2, 'bb', True],
         ...          [3, 'd', False]]
-        >>> foobaz = itervalues(table, ('foo', 'baz'))
+        >>> foobaz = itervalues(table, 'foo', 'baz')
         >>> foobaz.next()
         (1, True)
         >>> foobaz.next()
@@ -871,28 +856,44 @@ def itervalues(table, field, *sliceargs, **kwargs):
     short row, ``None`` is returned by default, or whatever is given by the
     `missing` keyword argument.
 
+    .. versionchanged:: 0.24
+
+    The `sliceargs` argument has been removed, if you need to slice the result
+    use :func:`values` which returns a container that can be sliced with the
+    standard Python suffix notation, or use :func:`itertools.islice`.
+
     """
-    
-    if 'missing' in kwargs:
-        missing = kwargs['missing']
-    else:
-        missing = None
+
+    missing = kwargs.get('missing', None)
     it = iter(table)
     srcflds = it.next()
+
+    # deal with field arg in a backwards-compatible way
+    if len(field) == 1:
+        field = field[0]
+
     indices = asindices(srcflds, field)
     assert len(indices) > 0, 'no field selected'
     getvalue = itemgetter(*indices)
-    if sliceargs:
-        it = islice(it, *sliceargs)
     for row in it:
         try:
             value = getvalue(row)
             yield value
         except IndexError:
-            yield missing
+            if len(indices) > 1:
+                # try one at a time
+                value = list()
+                for i in indices:
+                    if i < len(row):
+                        value.append(row[i])
+                    else:
+                        value.append(missing)
+                yield tuple(value)
+            else:
+                yield missing
     
     
-def values(table, field, *sliceargs, **kwargs):
+def values(table, *field, **kwargs):
     """
     Return a container supporting iteration over values in a given field or 
     fields. I.e., like :func:`itervalues` only a container is returned so you 
@@ -902,22 +903,28 @@ def values(table, field, *sliceargs, **kwargs):
 
     Now returns a container, previously returned an iterator. See also 
     :func:`itervalues`.
+
+    .. versionchanged:: 0.24
+
+    Multiple fields can be provided as positional arguments. The `sliceargs`
+    argument has been removed, if you need to slice the result this function
+    returns a container that can be sliced with the standard Python suffix
+    notation.
     
     """
     
-    return ValuesContainer(table, field, *sliceargs, **kwargs)
+    return ValuesContainer(table, *field, **kwargs)
     
     
 class ValuesContainer(IterContainer):
 
-    def __init__(self, table, field, *sliceargs, **kwargs):
+    def __init__(self, table, *field, **kwargs):
         self.table = table
         self.field = field
-        self.sliceargs = sliceargs
         self.kwargs = kwargs
         
     def __iter__(self):
-        return itervalues(self.table, self.field, *self.sliceargs, **self.kwargs)
+        return itervalues(self.table, *self.field, **self.kwargs)
     
     def __repr__(self):
         vreprs = map(repr, islice(self, 6))
@@ -956,10 +963,7 @@ def valuecount(table, field, value, missing=None):
 
     """
     
-    if isinstance(field, (list, tuple)):
-        it = itervalues(table, *field, missing=missing)
-    else:
-        it = itervalues(table, field, missing=missing)
+    it = itervalues(table, field, missing=missing)
     total = 0
     vs = 0
     for v in it:
@@ -969,7 +973,7 @@ def valuecount(table, field, value, missing=None):
     return vs, float(vs)/total
     
     
-def valuecounter(table, field, missing=None):
+def valuecounter(table, *field, **kwargs):
     """
     Find distinct values for the given field and count the number of 
     occurrences. Returns a :class:`dict` mapping values to counts. E.g.::
@@ -991,6 +995,7 @@ def valuecounter(table, field, missing=None):
 
     """
 
+    missing = kwargs.get('missing', None)
     counter = Counter()
     for v in itervalues(table, field, missing=missing):
         try:
@@ -1000,62 +1005,59 @@ def valuecounter(table, field, missing=None):
     return counter
             
 
-def valuecounts(table, *fields, **kwargs):    
+def valuecounts(table, *field, **kwargs):
     """
     Find distinct values for the given field and count the number and relative
     frequency of occurrences. Returns a table mapping values to counts, with most common 
     values first. E.g.::
 
-        >>> from petl import valuecounts, look
-        >>> table = [['foo', 'bar'], ['a', True], ['b'], ['b', True], ['c', False]]
+        >>> from petl import look, valuecounts
+        >>> look(table)
+        +-------+-------+-------+
+        | 'foo' | 'bar' | 'baz' |
+        +=======+=======+=======+
+        | 'a'   |  True |  0.12 |
+        +-------+-------+-------+
+        | 'a'   |  True |  0.17 |
+        +-------+-------+-------+
+        | 'b'   | False |  0.34 |
+        +-------+-------+-------+
+        | 'b'   | False |  0.44 |
+        +-------+-------+-------+
+        | 'b'   |       |       |
+        +-------+-------+-------+
+
         >>> look(valuecounts(table, 'foo'))
-        +---------+---------+-------------+
-        | 'value' | 'count' | 'frequency' |
-        +=========+=========+=============+
-        | 'b'     | 2       | 0.5         |
-        +---------+---------+-------------+
-        | 'a'     | 1       | 0.25        |
-        +---------+---------+-------------+
-        | 'c'     | 1       | 0.25        |
-        +---------+---------+-------------+
-        
-        >>> look(valuecounts(table, 'bar'))
-        +---------+---------+--------------------+
-        | 'value' | 'count' | 'frequency'        |
-        +=========+=========+====================+
-        | True    | 2       | 0.6666666666666666 |
-        +---------+---------+--------------------+
-        | False   | 1       | 0.3333333333333333 |
-        +---------+---------+--------------------+
-            
-    If more than one field is given, a report of value counts for each field
-    is given, e.g.::
-    
+        +-------+---------+--------------------+
+        | 'foo' | 'count' | 'frequency'        |
+        +=======+=========+====================+
+        | 'b'   |       4 | 0.6666666666666666 |
+        +-------+---------+--------------------+
+        | 'a'   |       2 | 0.3333333333333333 |
+        +-------+---------+--------------------+
+
         >>> look(valuecounts(table, 'foo', 'bar'))
-        +---------+---------+---------+-------------+
-        | 'field' | 'value' | 'count' | 'frequency' |
-        +=========+=========+=========+=============+
-        | 'foo'   | 'b'     |       2 |         0.5 |
-        +---------+---------+---------+-------------+
-        | 'foo'   | 'a'     |       1 |        0.25 |
-        +---------+---------+---------+-------------+
-        | 'foo'   | 'c'     |       1 |        0.25 |
-        +---------+---------+---------+-------------+
-        | 'bar'   |    True |       2 |         0.5 |
-        +---------+---------+---------+-------------+
-        | 'bar'   | None    |       1 |        0.25 |
-        +---------+---------+---------+-------------+
-        | 'bar'   |   False |       1 |        0.25 |
-        +---------+---------+---------+-------------+
-        
+        +-------+-------+---------+---------------------+
+        | 'foo' | 'bar' | 'count' | 'frequency'         |
+        +=======+=======+=========+=====================+
+        | 'b'   | False |       3 |                 0.5 |
+        +-------+-------+---------+---------------------+
+        | 'a'   |  True |       2 |  0.3333333333333333 |
+        +-------+-------+---------+---------------------+
+        | 'b'   | None  |       1 | 0.16666666666666666 |
+        +-------+-------+---------+---------------------+
+
     If rows are short, the value of the keyword argument `missing` is counted.
-    
+
+    .. versionchanged:: 0.24
+
+    Multiple fields can be given as positional arguments. If multiple fields are
+    given, these are now treated as a compound key. Also the field name is used
+    instead of 'key' in the output table.
+
     """
     
-    if len(fields) == 1:
-        return ValueCountsView(table, fields[0], **kwargs)
-    else:
-        return MultiValueCountsView(table, fields, **kwargs)
+    return ValueCountsView(table, field, **kwargs)
 
 
 class ValueCountsView(RowContainer):
@@ -1066,45 +1068,27 @@ class ValueCountsView(RowContainer):
         self.missing = missing
         
     def __iter__(self):
-        counter = valuecounter(self.table, self.field, missing=self.missing)
-        yield ('value', 'count', 'frequency')
-        counts = counter.most_common()
-        total = sum(c[1] for c in counts)
-        for c in counts:
-            yield (c[0], c[1], float(c[1])/total)
 
-        
-class MultiValueCountsView(RowContainer):
-    
-    def __init__(self, table, fields, missing=None):
-        self.table = table
-        self.fields = fields
-        self.missing = missing
-        
-    def __iter__(self):
-        
-        counters = dict()
-        it = iter(self.table)
-        fields = it.next()
-        if self.fields:
-            self.countfields = self.fields
+        # construct output header
+        if isinstance(self.field, (tuple, list)):
+            outfields = tuple(self.field) + ('count', 'frequency')
         else:
-            self.countfields = fields
-        for f in self.countfields:
-            counters[f] = Counter()
-        for row in it:
-            for f, v in izip_longest(fields, row, fillvalue=self.missing):
-                if f != self.missing and f in self.countfields:
-                    counters[f][v] += 1
-                
-        yield ('field', 'value', 'count', 'frequency')
-        for f in self.countfields:
-            counts = counters[f].most_common()
-            total = sum(c[1] for c in counts)
-            for c in counts:
-                yield (f, c[0], c[1], float(c[1])/total)
+            outfields = (self.field, 'count', 'frequency')
+        yield outfields
 
-        
+        # count values
+        counter = valuecounter(self.table, *self.field, missing=self.missing)
+        counts = counter.most_common()  # sort descending
+        total = sum(c[1] for c in counts)
+
+        if len(self.field) > 1:
+            for c in counts:
+                yield tuple(c[0]) + (c[1], float(c[1])/total)
+        else:
+            for c in counts:
+                yield (c[0], c[1], float(c[1])/total)
+
+
 def columns(table, missing=None):
     """
     Construct a :class:`dict` mapping field names to lists of values. E.g.::
@@ -1649,7 +1633,7 @@ def asindices(flds, spec):
             indices.append(names.index(s))
         # or spec could be a field index
         elif isinstance(s, int) and s < len(names):
-            indices.append(s) # index fields from 0
+            indices.append(s)  # index fields from 0
         else:
             raise FieldSelectionError(s)
     return indices
@@ -2307,9 +2291,13 @@ def parsenumber(v, strict=False):
     .. versionadded:: 0.4
     
     .. versionchanged:: 0.7 Set ``strict=True`` to get an exception if parsing fails.
+
+    .. deprecated:: 0.24
+
+    Use :func:`numparser` instead.
     
     """
-    
+
     try:
         return int(v)
     except:
@@ -2328,6 +2316,40 @@ def parsenumber(v, strict=False):
         if strict:
             raise
     return v
+
+
+def numparser(strict=False):
+    """
+    Return a function that will attempt to parse the value as a number, trying
+    :func:`int`, :func:`long`, :func:`float` and :func:`complex` in that order.
+    If all fail, return the value as-is, unless `strict`=`True`, in which case
+    raise the underlying exception.
+
+    .. versionadded:: 0.24
+
+    """
+
+    def f(v):
+        try:
+            return int(v)
+        except:
+            pass
+        try:
+            return long(v)
+        except:
+            pass
+        try:
+            return float(v)
+        except:
+            pass
+        try:
+            return complex(v)
+        except:
+            if strict:
+                raise
+        return v
+
+    return f
 
 
 def stringpatterncounter(table, field):
@@ -2772,11 +2794,8 @@ def iterrecords(table, *sliceargs, **kwargs):
     tuples/dicts/namedtuples. 
 
     """
-    
-    if 'missing' in kwargs:
-        missing = kwargs['missing']
-    else:
-        missing = None
+
+    missing = kwargs.get('missing', None)
     it = iter(table)
     flds = it.next()
     if sliceargs:
@@ -3351,3 +3370,21 @@ def empty():
 
     return [[]]
 
+
+def coalesce(*fields, **kwargs):
+    """
+    Return a function which accepts a row and returns the first non-missing
+    value from the specified fields.
+
+    """
+    missing = kwargs.get('missing', None)
+    default = kwargs.get('default', None)
+
+    def _coalesce(row):
+        for f in fields:
+            v = row[f]
+            if v is not missing:
+                return v
+        return default
+
+    return _coalesce

@@ -3,6 +3,23 @@ Examples used in docstrings.
 
 """
 
+# valuecounts
+##############
+
+table = (('foo', 'bar', 'baz'),
+         ('a', True, .12),
+         ('a', True, .17),
+         ('b', False, .34),
+         ('b', False, .44),
+         ('b',),
+         ('b', False, .56))
+
+from petl import look, valuecounts
+look(table)
+look(valuecounts(table, 'foo'))
+look(valuecounts(table, 'foo', 'bar'))
+
+
 # facetcolumns
 
 from petl import facetcolumns
@@ -126,7 +143,9 @@ table9 = cat(table7, table8, header=['A', 'foo', 'B', 'bar', 'C'])
 look(table9)
 
 
+#########
 # convert
+#########
 
 table1 = [['foo', 'bar', 'baz'],
           ['A', '2.4', 12],
@@ -168,6 +187,9 @@ look(table11)
 # conversion can be conditional
 table12 = convert(table1, 'baz', lambda v: v*2, where=lambda r: r.foo == 'B')
 look(table12)
+# conversion can access other values from the same row
+table14 = convert(table1, 'baz', lambda v, row: v * float(row.bar))
+look(table14)
 
 
 # convertnumbers
@@ -1749,3 +1771,50 @@ look(table4)
 table5, table6 = unjoin(table4, 'bar')
 look(table5)
 look(table6)
+
+
+# selectwithcontext
+###################
+
+table1 = (('foo', 'bar'),
+          ('A', 1),
+          ('B', 4),
+          ('C', 5),
+          ('D', 9))
+
+from petl import look, selectwithcontext
+look(table1)
+def query(prv, cur, nxt):
+    return ((prv is not None and (cur.bar - prv.bar) < 2)
+            or (nxt is not None and (nxt.bar - cur.bar) < 2))
+
+table2 = selectwithcontext(table1, query)
+look(table2)
+
+
+# addfieldusingcontext
+######################
+
+table1 = (('foo', 'bar'),
+          ('A', 1),
+          ('B', 4),
+          ('C', 5),
+          ('D', 9))
+
+from petl import look, addfieldusingcontext
+look(table1)
+def upstream(prv, cur, nxt):
+    if prv is None:
+        return None
+    else:
+        return cur.bar - prv.bar
+
+def downstream(prv, cur, nxt):
+    if nxt is None:
+        return None
+    else:
+        return nxt.bar - cur.bar
+
+table2 = addfieldusingcontext(table1, 'baz', upstream)
+table3 = addfieldusingcontext(table2, 'quux', downstream)
+look(table3)

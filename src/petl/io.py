@@ -854,10 +854,7 @@ class XmlView(RowContainer):
             self.attr = args[2]
         else:
             assert False, 'bad parameters'
-        if 'missing' in kwargs:
-            self.missing = kwargs['missing']
-        else:
-            self.missing = None
+        self.missing = kwargs.get('missing', None)
         
     def __iter__(self):
         with self.source.open_('rb') as f:
@@ -940,15 +937,9 @@ class JsonView(RowContainer):
         self.source = source
         self.args = args
         self.kwargs = kwargs
-        self.missing = None
-        self.header = None
-        if 'missing' in kwargs:
-            self.missing = kwargs['missing']
-            del self.kwargs['missing']
-        if 'header' in kwargs:
-            self.header = kwargs['header']
-            del self.kwargs['header']
-        
+        self.missing = kwargs.pop('missing', None)
+        self.header = kwargs.pop('header', None)
+
     def __iter__(self):
         with self.source.open_('rb') as f:
             result = json.load(f, *self.args, **self.kwargs)
@@ -1951,7 +1942,7 @@ def _writetext(table, f, prologue, template, epilogue):
 
 def tohtml(table, source=None, caption=None, representation=str, lineterminator='\r\n'):
     """
-    Write the table as simple HTML to a file. E.g.::
+    Write the table as HTML to a file. E.g.::
 
         >>> from petl import tohtml, look    
         >>> look(table)
@@ -1976,7 +1967,7 @@ def tohtml(table, source=None, caption=None, representation=str, lineterminator=
     source = _write_source_from_arg(source)
     with source.open_('w') as f:
         it = iter(table)
-        f.write('<table>' + lineterminator)
+        f.write("<table class='petl'>" + lineterminator)
         if caption is not None:
             f.write(('<caption>%s</caption>' % caption) + lineterminator)
         flds = it.next()
@@ -1991,7 +1982,7 @@ def tohtml(table, source=None, caption=None, representation=str, lineterminator=
             f.write('<tr>' + lineterminator)
             for v in row:
                 r = representation(v)
-                if isinstance(v, (int, long, float)):
+                if isinstance(v, (int, long, float)) and not isinstance(v, bool):
                     f.write(("<td style='text-align: right'>%s</td>" % r) + lineterminator)
                 else:
                     f.write(('<td>%s</td>' % r) + lineterminator)
@@ -2002,7 +1993,7 @@ def tohtml(table, source=None, caption=None, representation=str, lineterminator=
     
 def touhtml(table, source=None, caption=None, encoding='utf-8', representation=unicode, lineterminator=u'\r\n'):
     """
-    TODO
+    Write the table as Unicode HTML to a file.
 
     .. versionadded:: 0.19
     """
@@ -2011,7 +2002,7 @@ def touhtml(table, source=None, caption=None, encoding='utf-8', representation=u
     with source.open_('w') as f:
         f = codecs.getwriter(encoding)(f)
         it = iter(table)
-        f.write(u'<table>' + lineterminator)
+        f.write(u"<table class='petl'>" + lineterminator)
         if caption is not None:
             f.write((u'<caption>%s</caption>' % caption) + lineterminator)
         flds = it.next()
@@ -2026,7 +2017,7 @@ def touhtml(table, source=None, caption=None, encoding='utf-8', representation=u
             f.write(u'<tr>' + lineterminator)
             for v in row:
                 r = representation(v)
-                if isinstance(v, (int, long, float)):
+                if isinstance(v, (int, long, float)) and not isinstance(v, bool):
                     f.write((u"<td style='text-align: right'>%s</td>" % r) + lineterminator)
                 else:
                     f.write((u'<td>%s</td>' % r) + lineterminator)
